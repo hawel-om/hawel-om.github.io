@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>اربط رقم متجرك — نظام حوّل</title>
+<link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;500;800&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#1F2A44;--sub:#4A4F55;--green:#25D366;--blue:#1A8FE3}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font-family:'Alexandria',system-ui,sans-serif;color:var(--ink);
+  background:radial-gradient(circle at 85% 12%,rgba(37,211,102,.35),transparent 40%),radial-gradient(circle at 10% 70%,rgba(26,143,227,.25),transparent 45%),linear-gradient(160deg,#EEF1F5,#E2ECE8);
+  display:flex;align-items:center;justify-content:center;padding:24px}
+.card{width:100%;max-width:520px;background:rgba(255,255,255,.62);border:1.5px solid rgba(255,255,255,.95);border-radius:32px;padding:36px 32px;
+  box-shadow:0 24px 60px rgba(31,42,68,.14), inset 0 2px 0 rgba(255,255,255,.9);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.logo{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.logo b{font-size:30px;font-weight:800}
+h1{font-size:26px;line-height:1.5;margin:0 0 10px;font-weight:800}
+p{margin:0 0 18px;color:#2B2F33;line-height:1.8;font-size:16px}
+ol{margin:0 0 24px;padding-inline-start:22px;color:#2B2F33;line-height:1.9}
+button{width:100%;min-height:56px;border:0;border-radius:999px;background:var(--green);color:var(--ink);font:800 18px 'Alexandria',sans-serif;cursor:pointer;
+  box-shadow:0 10px 24px rgba(37,211,102,.35), inset 0 2px 0 rgba(255,255,255,.5)}
+button:disabled{opacity:.55;cursor:wait}
+#status{margin-top:18px;padding:14px 18px;border-radius:18px;background:rgba(255,255,255,.7);display:none;line-height:1.7}
+#status.ok{display:block;border:1.5px solid var(--green)}
+#status.err{display:block;border:1.5px solid #E5484D}
+#status.info{display:block;border:1.5px solid var(--blue)}
+small{display:block;margin-top:20px;color:var(--sub);font-size:13px;line-height:1.7}
+a{color:var(--blue)}
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="logo">
+    <svg viewBox="18 14 64 71" width="46" height="51" aria-hidden="true"><circle cx="50" cy="46" r="30" fill="#25D366"/><path d="M30,64 L23,83 L42,74 Z" fill="#25D366"/><path d="M39,29 H61 V61 L57.33,58 L53.67,61 L50,58 L46.33,61 L42.67,58 L39,61 Z" fill="#fff"/><path d="M41.8,46 L45.6,49.8 L53,41.6 M48.6,47.3 L51.1,49.8 L58.5,41.6" fill="none" stroke="#1A8FE3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <b>حوّل</b>
+  </div>
+  <h1>اربط رقم واتساب متجرك بنظام حوّل</h1>
+  <p>بعد الربط يردّ نظام حوّل على زبائنك ويؤكّد دفعهم من رقم متجرك.</p>
+  <ol>
+    <li>اضغط الزر وسجّل الدخول بحساب فيسبوك الذي يدير نشاطك.</li>
+    <li>اختر نشاطك التجاري، أو أنشئ واحداً باسم متجرك.</li>
+    <li>اختر رقم واتساب المتجر، وأدخل رمز التحقق الذي يصلك.</li>
+  </ol>
+  <button id="go" type="button" disabled>جارٍ التحميل…</button>
+  <div id="status" role="status" aria-live="polite"></div>
+  <small>بالضغط على الزر توافق على <a href="privacy.html">سياسة الخصوصية</a>. رسوم رسائل واتساب تفوترها ميتا على حسابك مباشرة، واشتراك حوّل منفصل عنها.</small>
+</main>
+
+<script>
+// ===== الإعدادات: تُعبّأ بعد إنشاء تطبيق Hawel في ميتا =====
+const CONFIG = {
+  APP_ID: '4717353265189777',            // معرّف تطبيق Hawel
+  CONFIG_ID: '1510375304612805',      // معرّف إعداد Facebook Login for Business (WhatsApp Embedded Signup)
+  GRAPH_VERSION: 'v25.0',           // راجعه مع وثائق ميتا وقت التفعيل
+  COEXISTENCE: true,                // true: يسمح بربط رقم يعمل في تطبيق واتساب للأعمال (التعايش)
+  WEBHOOK: 'https://shoogp.app.n8n.cloud/webhook/hawel-onboard' // سير n8n يستبدل الرمز بالتوكن (يُبنى لاحقاً)
+};
+// ============================================================
+
+const btn = document.getElementById('go');
+const box = document.getElementById('status');
+const session = { code: null, waba_id: null, phone_number_id: null, business_id: null, event: null };
+function show(cls, msg){ box.className = cls; box.textContent = msg; }
+
+window.fbAsyncInit = function () {
+  FB.init({ appId: CONFIG.APP_ID, autoLogAppEvents: true, xfbml: true, version: CONFIG.GRAPH_VERSION });
+  btn.disabled = false; btn.textContent = 'اربط رقم متجرك';
+};
+
+window.addEventListener('message', (event) => {
+  if (!event.origin.endsWith('facebook.com')) return;
+  let data; try { data = JSON.parse(event.data); } catch { return; }
+  if (data.type !== 'WA_EMBEDDED_SIGNUP') return;
+  session.event = data.event;
+  if (String(data.event).startsWith('FINISH')) {
+    Object.assign(session, {
+      waba_id: data.data?.waba_id || null,
+      phone_number_id: data.data?.phone_number_id || null,
+      business_id: data.data?.business_id || null
+    });
+    trySend();
+  } else if (data.event === 'CANCEL' || data.event === 'ERROR') {
+    const m = data.data?.error_message ? 'حدث خطأ: ' + data.data.error_message : 'لم يكتمل الربط. يمكنك المحاولة مرة أخرى.';
+    show('err', m); btn.disabled = false;
+  }
+});
+
+function fbLoginCallback(response) {
+  if (response.authResponse && response.authResponse.code) {
+    session.code = response.authResponse.code;   // صالح ٣٠ ثانية فقط
+    trySend();
+  } else {
+    show('err', 'لم يكتمل تسجيل الدخول. يمكنك المحاولة مرة أخرى.'); btn.disabled = false;
+  }
+}
+
+let sent = false;
+async function trySend() {
+  if (sent || !session.code || !session.waba_id) return;
+  sent = true; show('info', 'جارٍ إكمال الربط…');
+  try {
+    const r = await fetch(CONFIG.WEBHOOK, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...session, coexistence: CONFIG.COEXISTENCE, page: location.href }) });
+    if (!r.ok) throw new Error(r.status);
+    show('ok', 'تم ربط رقم متجرك بنظام حوّل ✅ سنتواصل معك لإكمال معلومات المتجر.');
+  } catch (e) {
+    sent = false; show('err', 'تعذّر إكمال الربط من جهتنا. راسلنا على إنستقرام @hawel.om وسنكمله معك.');
+  }
+}
+
+btn.addEventListener('click', () => {
+  btn.disabled = true; box.className = '';
+  const extras = { setup: {}, sessionInfoVersion: '3' };
+  if (CONFIG.COEXISTENCE) extras.featureType = 'whatsapp_business_app_onboarding';
+  FB.login(fbLoginCallback, { config_id: CONFIG.CONFIG_ID, response_type: 'code', override_default_response_type: true, extras });
+});
+</script>
+<script async defer crossorigin="anonymous" src="https://connect.facebook.net/ar_AR/sdk.js"></script>
+</body>
+</html>
